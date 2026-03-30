@@ -7,7 +7,7 @@
 
 ## Table of Contents
 
-1. [Architecture Overview](#1-architecture-overview)
+1. [Entities, Nodes & Relationships](#1-entities-nodes--relationships)
 2. [What is RAG? (The Beginning)](#2-what-is-rag-the-beginning)
 3. [Why GraphRAG Came Into the Picture](#3-why-graphrag-came-into-the-picture)
 4. [Why GraphRAG is Useful](#4-why-graphrag-is-useful)
@@ -19,52 +19,77 @@
 
 ---
 
-## 1. Architecture Overview
+## 1. Entities, Nodes & Relationships
 
-The diagram below describes the full GraphRAG pipeline from raw data to final answer:
+This is the building block that makes GraphRAG fundamentally different from RAG. Understanding it makes every other trade-off in this guide obvious.
+
+### What is an Entity?
+
+An **entity** is any distinct, nameable thing that appears in your documents.
+
+> Examples from a research paper on LLM agents:
+> `agent`, `memory`, `planning`, `tools`, `reasoning`, `environment`, `task`
+
+### What is a Node?
+
+Each unique entity becomes a **node** in the knowledge graph. Every node has a name and a type.
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         GRAPHRAG ARCHITECTURE                               │
-│                                                                             │
-│  INPUT                                                                      │
-│  ┌──────────────┐                                                           │
-│  │ Structured   │──► Data Transformation ──────────────────────┐           │
-│  │ (CSV, DB)    │                                               │           │
-│  └──────────────┘                                              ▼           │
-│                        ┌──────────────┐    Named Entity    ┌─────────┐    │
-│  ┌──────────────┐      │ Text Chunks  │──► Resolution  ──► │Knowledge│    │
-│  │ Unstructured │─────►│              │                     │ Graph   │    │
-│  │ (PDF, Text)  │      └──────────────┘                     │ (Neo4j) │    │
-│  └──────────────┘             │                             └────┬────┘    │
-│                               ▼                                  │         │
-│                       Text Embedding Model                        │         │
-│                               │                                  │         │
-│                               ▼                                  ▼         │
-│                        Vector Embeddings    ◄──── Contextually similar     │
-│                                                   chunks + connected        │
-│                                                   entities as context       │
-│                                                                             │
-│  QUERY                                                                      │
-│  User Prompt ──► [Vector Search + Graph Traversal] ──► Generative Model    │
-│                                                               │             │
-│                           Compile Final Answer ◄─────────────┘             │
-│                                │                                            │
-│                           Response to User                                  │
-└─────────────────────────────────────────────────────────────────────────────┘
+● agent          (type: Concept)
+● memory         (type: Concept)
+● tools          (type: Concept)
+● planning       (type: Concept)
+● reasoning      (type: Concept)
 ```
 
-### What happens at each stage
+### What is a Relationship (Edge)?
 
-| Stage | What it does |
-|-------|-------------|
-| **Chunking** | Splits large documents into manageable text pieces |
-| **Text Embedding Model** | Converts each chunk into a dense vector (semantic fingerprint) |
-| **Generative Model (extraction)** | Reads each chunk and pulls out entities + relationships as structured triplets |
-| **Named Entity Resolution** | Normalises duplicate entity mentions (`"OpenAI"` and `"open ai"` → same node) |
-| **Knowledge Graph** | Stores all entities as nodes, all relationships as edges — queryable via Cypher |
-| **Query time** | User question triggers both vector search AND graph traversal; both contexts go to the LLM |
-| **Compile Final Answer** | LLM synthesises an answer grounded in retrieved evidence |
+A **relationship** is a directed, named connection between two entities.
+
+```
+syntax:   (Subject) ──[predicate]──► (Object)
+
+examples:
+  agent    ──[uses]──────────►  tools
+  agent    ──[relies on]──────►  memory
+  memory   ──[stores]─────────►  past actions
+  planning ──[improves]───────►  reasoning
+  tools    ──[extend]─────────►  agent capabilities
+  planning ──[decomposes]─────►  tasks
+```
+
+### Why This Matters
+
+RAG sees your corpus as a **bag of text chunks** — no awareness of how concepts connect.  
+GraphRAG sees your corpus as a **network of entities** — every relationship is an explicit edge you can traverse.
+
+| Concept | RAG | GraphRAG |
+|---------|-----|----------|
+| How knowledge is stored | Flat text chunks | Nodes (entities) + Edges (relationships) |
+| How retrieval works | "Find chunks similar to this question" | "Find entities matching this question, follow their edges" |
+| Can it answer "How does A affect C via B?" | ❌ No — A, B, C likely in separate chunks | ✅ Yes — traverse A → B → C in one query |
+
+### The Core Triplet
+
+Every fact in the knowledge graph is stored as a **(subject, predicate, object)** triplet:
+
+| Subject | Predicate | Object |
+|---------|-----------|--------|
+| agent | uses | tools |
+| agent | relies on | memory |
+| planning | improves | reasoning |
+| memory | stores | past actions |
+| tools | extend | agent capabilities |
+| planning | decomposes | tasks |
+
+These triplets are extracted from raw text by an LLM during the ingestion phase, then stored in Neo4j. At query time, Cypher traverses the graph to return paths like:
+
+```
+agent ──[uses]──► tools ──[extend]──► agent capabilities
+       ──[relies on]──► memory ──[stores]──► past actions
+```
+
+The LLM receives these structured paths as context — not raw text — and constructs a precise, traceable answer.
 
 ---
 

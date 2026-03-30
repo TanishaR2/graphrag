@@ -13,7 +13,7 @@ venv/
 
 # Secrets — NEVER commit these
 .env
-*.env
+# sample.env is intentionally tracked (placeholder values only)
 
 # Downloaded files / outputs
 llm_agents.pdf
