@@ -1,0 +1,26 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv  
+.venv/
+venv/
+
+# Secrets — NEVER commit these
+.env
+*.env
+
+# Downloaded files / outputs
+llm_agents.pdf
+chroma_db/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+#trash folder
+dumps/
